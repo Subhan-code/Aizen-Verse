@@ -246,7 +246,7 @@ const Home: React.FC<HomeProps> = ({ fallbackData, theme = 'dark' }) => {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-black dark:text-white font-bold text-sm truncate">{anime.title}</h3>
+                <h3 className="text-black dark:text-white font-bold text-base truncate">{anime.title}</h3>
                 <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{anime.genres?.slice(0, 2).join(', ') || 'Anime'}</p>
               </div>
               <div className="bg-white/20 dark:bg-black/30 text-black dark:text-white text-xs font-bold px-2 py-1 rounded-full">

@@ -22,6 +22,8 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
   const [loading, setLoading] = useState(true);
   const [episodesLoading, setEpisodesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredEpisodes, setFilteredEpisodes] = useState<Episode[]>([]);
 
   const [category, setCategory] = useState<StreamCategory>(StreamCategory.SUB);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
@@ -123,11 +125,17 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
     api.getAnimeInfo(animeId)
       .then(response => {
         // Ensure episodes array exists
-        setAnimeInfo({ ...response, episodes: response.episodes || [] });
+        const updatedAnimeInfo = { ...response, episodes: response.episodes || [] };
+        setAnimeInfo(updatedAnimeInfo);
+        setFilteredEpisodes(updatedAnimeInfo.episodes);
       })
       .catch(() => 
         // fallback to episodeId if needed
-        api.getAnimeInfo(episodeId).then(res => setAnimeInfo({ ...res, episodes: res.episodes || [] }))
+        api.getAnimeInfo(episodeId).then(res => {
+          const updatedAnimeInfo = { ...res, episodes: res.episodes || [] };
+          setAnimeInfo(updatedAnimeInfo);
+          setFilteredEpisodes(updatedAnimeInfo.episodes);
+        })
       )
       .finally(() => setEpisodesLoading(false));
   }, [episodeId]);
@@ -138,6 +146,34 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
       activeEpisodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [episodeId, animeInfo]);
+
+  // Filter episodes based on search query
+  useEffect(() => {
+    if (!animeInfo || !animeInfo.episodes) {
+      setFilteredEpisodes([]);
+      return;
+    }
+
+    if (!searchQuery.trim()) {
+      setFilteredEpisodes(animeInfo.episodes);
+      return;
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = animeInfo.episodes.filter(episode => {
+      // Check if episode number matches (exact or partial)
+      const episodeNumberStr = episode.number.toString();
+      const matchesNumber = episodeNumberStr.includes(query);
+      
+      // Check if episode title matches (partial match)
+      const episodeTitle = episode.title || `Episode ${episode.number}`;
+      const matchesTitle = episodeTitle.toLowerCase().includes(query);
+      
+      return matchesNumber || matchesTitle;
+    });
+
+    setFilteredEpisodes(filtered);
+  }, [searchQuery, animeInfo]);
 
   // Save watch history & continue watching
   useEffect(() => {
@@ -188,6 +224,20 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
   };
 
   const videoSrc = getProxiedVideoSrc();
+
+  // Helper function to highlight matching text in episode titles
+  const highlightMatch = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    
+    const regex = new RegExp(`(${query})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => 
+      regex.test(part) ? 
+        <span key={index} className="font-bold bg-yellow-400 text-black">{part}</span> : 
+        part
+    );
+  };
 
   // Handle source selection
   const handleSourceSelect = (source: Source & { server?: StreamServer }) => {
@@ -314,17 +364,41 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
 
     {/* Episodes */}
     <div className="px-4 py-4">
-      <h3 className="text-white font-bold mb-3">
-        Episodes ({animeInfo?.episodes.length || 0})
-      </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-white font-bold">
+          Episodes ({filteredEpisodes.length}/{animeInfo?.episodes.length || 0})
+        </h3>
+        <div className="relative w-1/2">
+          <input
+            type="text"
+            placeholder="Search episodes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setSearchQuery('');
+              }
+            }}
+            className="w-full px-3 py-1 text-sm bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-1 focus:ring-white"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-4 gap-2">
         {episodesLoading ? (
           <div className="col-span-4 flex justify-center py-6">
             <Loader className="w-6 h-6 animate-spin text-white" />
           </div>
-        ) : animeInfo?.episodes.length ? (
-          animeInfo.episodes.map(ep => {
+        ) : filteredEpisodes.length ? (
+          filteredEpisodes.map(ep => {
             const active = ep.id === episodeId;
             return (
               <button
@@ -343,7 +417,7 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
           })
         ) : (
           <div className="col-span-4 text-center text-gray-500">
-            No episodes found
+            {searchQuery ? 'No matching episodes found' : 'No episodes found'}
           </div>
         )}
       </div>
@@ -465,8 +539,55 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
         </div>
           
           <div className={`p-4 border-b flex justify-between items-center ${theme === 'light' ? 'border-gray-200' : 'border-white/10'}`}>
-            <h3 className="font-bold text-lg">Episodes ({animeInfo?.episodes.length || 0})</h3>
-          </div>
+  <h3 className="font-bold text-lg">
+    Episodes ({filteredEpisodes.length}/{animeInfo?.episodes.length || 0})
+  </h3>
+
+  <div className="relative w-64">
+    <input
+      type="text"
+      placeholder="Search episodes..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          setSearchQuery('');
+        }
+      }}
+      className={`w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-1 ${
+        theme === 'light'
+          ? 'bg-gray-200 text-black focus:ring-black'
+          : 'bg-gray-800 text-white focus:ring-white'
+      }`}
+    />
+
+    {searchQuery && (
+      <button
+  onClick={() => setSearchQuery('')}
+  className={`absolute right-3 top-1/2 -translate-y-[90%] ${
+    theme === 'light'
+      ? 'text-gray-600 hover:text-black'
+      : 'text-gray-400 hover:text-white'
+  }`}
+>
+  <X className="w-4 h-4" />
+</button>
+
+    )}
+
+    {/* Helper / caution text */}
+    <p
+      className={`mt-1 text-xs ${
+        theme === 'light'
+          ? 'text-gray-600'
+          : 'text-gray-400'
+      }`}
+    >
+      Clear search after finding, then Next. 
+    </p>
+  </div>
+</div>
+
         
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {episodesLoading ? (
@@ -474,8 +595,8 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
               <Loader className={`w-6 h-6 animate-spin mx-auto mb-2 ${theme === 'light' ? 'text-black' : 'text-white'}`} />
               <p>Loading episodes...</p>
             </div>
-          ) : animeInfo && animeInfo.episodes.length > 0 ? (
-            animeInfo.episodes.map(ep => {
+          ) : filteredEpisodes.length > 0 ? (
+            filteredEpisodes.map(ep => {
               const isCurrent = ep.id === episodeId;
               return (
                 <button
@@ -492,13 +613,15 @@ const Watch: React.FC<WatchProps> = ({ theme = 'dark', setIsNavbarGlass }) => {
                     {ep.number}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className={`truncate ${isCurrent ? 'text-black' : theme === 'light' ? 'text-black' : 'text-white'}`}>{ep.title || `Episode ${ep.number}`}</p>
+                    <p className={`truncate ${isCurrent ? 'text-black' : theme === 'light' ? 'text-black' : 'text-white'}`}>
+                      {highlightMatch(ep.title || `Episode ${ep.number}`, searchQuery)}
+                    </p>
                   </div>
                 </button>
               );
             })
           ) : (
-            <div className={`p-4 text-center ${theme === 'light' ? 'text-gray-700' : 'text-gray-500'}`}>No episodes found.</div>
+            <div className={`p-4 text-center ${theme === 'light' ? 'text-gray-700' : 'text-gray-500'}`}>{searchQuery ? 'No matching episodes found.' : 'No episodes found.'}</div>
           )}
         </div>
       </div>
